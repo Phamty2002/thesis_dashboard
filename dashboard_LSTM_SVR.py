@@ -12,8 +12,8 @@ import ast
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 # Paths to data
-folder_path = r'C:\Users\Pham Ty\Desktop\Thesis-Predict\Dataset-2'  # Folder with stock CSV files
-output_folder = r'C:\Users\Pham Ty\Desktop\Thesis-Predict\Dataset_processed_2'  # Output folder
+folder_path = os.path.join('Data')
+output_folder = os.path.join('Result')
 
 # List of stock symbols
 symbols = ['NVDA', 'INTC', 'PLTR', 'TSLA', 'AAPL', 'BBD', 'T', 'SOFI',
@@ -497,7 +497,6 @@ def download_predictions(n_clicks, selected_stock):
 # Run Dash app
 if __name__ == '__main__':
     app.run_server(debug=True, use_reloader=False)
-
 
 from dash import html, dcc
 import plotly.graph_objs as go
