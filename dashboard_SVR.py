@@ -306,7 +306,7 @@ import pandas as pd
 
 def create_layout(app):
     # Load dữ liệu từ file CSV cho mô hình LSTM_SVR
-    df = pd.read_csv('Result/forecast_summary_lstm_svr.csv')
+    df = pd.read_csv('Result/forecast_summary_svr.csv')
 
     layout = html.Div([
         html.H2('LSTM_SVR Model Dashboard'),

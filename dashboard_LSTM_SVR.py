@@ -501,36 +501,180 @@ if __name__ == '__main__':
 from dash import html, dcc
 import plotly.graph_objs as go
 import pandas as pd
+import os
+import logging
 
 def create_layout(app):
-    # Load dữ liệu từ file CSV cho mô hình LSTM
-    df = pd.read_csv('Result/forecast_summary_lstm_svr.csv')
+    # Configure logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
+    # Paths to data
+    folder_path = os.path.join('Data')  # Ensure this path points to your stock data CSVs
+    output_folder = os.path.join('Result')
+
+    # Fetch available stock symbols by listing CSV files in the data folder
+    available_stocks = [f.replace('.csv', '') for f in os.listdir(folder_path) if f.endswith('.csv')]
+
+    # Define the layout with dropdowns for stock selection and date range
     layout = html.Div([
-        html.H2('LSTM Model Dashboard'),
+        html.H2('LSTM_SVR Model Dashboard'),
+
+        # Stock Symbol Selection Dropdown
+        html.Div([
+            html.Label('Select Stock Symbol:'),
+            dcc.Dropdown(
+                id='stock-dropdown',
+                options=[{'label': symbol, 'value': symbol} for symbol in available_stocks],
+                value=available_stocks[0],  # Default value
+                clearable=False
+            )
+        ], style={'width': '48%', 'display': 'inline-block'}),
+
+        # Date Range Picker
+        html.Div([
+            html.Label('Select Date Range:'),
+            dcc.DatePickerRange(
+                id='date-picker',
+                min_date_allowed=pd.to_datetime('2000-01-01'),
+                max_date_allowed=pd.to_datetime('today'),
+                start_date=pd.to_datetime('2020-01-01'),
+                end_date=pd.to_datetime('today')
+            )
+        ], style={'width': '48%', 'display': 'inline-block', 'float': 'right'}),
+
+        # Graph
         dcc.Graph(
-            id='graph-lstm',
-            figure={
+            id='graph-lstm'
+        ),
+
+        # Hidden Div for Error Messages
+        html.Div(id='error-message', style={'color': 'red'})
+    ])
+
+    # Callback to update the graph based on selected stock and date range
+    @app.callback(
+        Output('graph-lstm', 'figure'),
+        Output('error-message', 'children'),
+        Input('stock-dropdown', 'value'),
+        Input('date-picker', 'start_date'),
+        Input('date-picker', 'end_date')
+    )
+    def update_graph(selected_stock, start_date, end_date):
+        try:
+            logging.info(f"Selected Stock: {selected_stock}, Start Date: {start_date}, End Date: {end_date}")
+
+            # Load stock data CSV which contains 'Date' and 'Close'
+            stock_data_file = os.path.join(folder_path, f'{selected_stock}.csv')
+
+            if not os.path.exists(stock_data_file):
+                raise FileNotFoundError(f"{selected_stock}.csv not found in Data folder.")
+
+            df_stock = pd.read_csv(stock_data_file)
+            logging.info(f"Loaded stock data for {selected_stock} successfully.")
+
+            # Ensure 'Date' column exists
+            if 'Date' not in df_stock.columns:
+                raise KeyError("'Date' column is missing in the stock data CSV.")
+
+            # Convert 'Date' to datetime
+            df_stock['Date'] = pd.to_datetime(df_stock['Date'], errors='coerce')
+            if df_stock['Date'].isnull().any():
+                raise ValueError("Some dates could not be parsed. Please check the 'Date' column.")
+
+            # Filter data based on selected date range
+            mask = (df_stock['Date'] >= pd.to_datetime(start_date)) & (df_stock['Date'] <= pd.to_datetime(end_date))
+            df_stock_filtered = df_stock.loc[mask]
+
+            if df_stock_filtered.empty:
+                raise ValueError("No data available for the selected date range.")
+
+            # Load forecast summary to get predicted and actual prices
+            forecast_summary_file = os.path.join(output_folder, 'forecast_summary_lstm_svr.csv')
+            if not os.path.exists(forecast_summary_file):
+                raise FileNotFoundError("forecast_summary_lstm_svr.csv not found in Result folder.")
+
+            forecast_summary_df = pd.read_csv(forecast_summary_file)
+            forecast_row = forecast_summary_df[forecast_summary_df['Symbol'] == selected_stock]
+
+            if forecast_row.empty:
+                raise ValueError(f"No forecast data found for {selected_stock}.")
+
+            # Extract lists from string representations
+            list_columns = ['Predicted_Prices', 'Actual_Prices', 'Future_Price_Predictions', 'Train_Prices']
+            for col in list_columns:
+                if col in forecast_row.columns:
+                    forecast_row[col] = forecast_row[col].apply(
+                        lambda x: ast.literal_eval(x) if pd.notnull(x) else []
+                    )
+
+            actual_prices = forecast_row.iloc[0]['Actual_Prices']
+            predicted_prices = forecast_row.iloc[0]['Predicted_Prices']
+            future_prices = forecast_row.iloc[0]['Future_Price_Predictions']
+            train_prices = forecast_row.iloc[0]['Train_Prices']
+
+            # Generate dates for predictions
+            last_date = df_stock['Date'].max()
+            future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(future_prices), freq='D')
+
+            # Create DataFrame for predictions
+            df_predictions = pd.DataFrame({
+                'Date': future_dates,
+                'Future_Price_Prediction': future_prices
+            })
+
+            # Create the figure
+            figure = {
                 'data': [
                     go.Scatter(
-                        x=df['Date'],
-                        y=df['Predicted'],
-                        mode='lines+markers',
-                        name='Predicted'
+                        x=df_stock_filtered['Date'],
+                        y=df_stock_filtered['Close'],
+                        mode='lines',
+                        name='Actual Price'
                     ),
                     go.Scatter(
-                        x=df['Date'],
-                        y=df['Actual'],
+                        x=df_stock_filtered['Date'],
+                        y=train_prices[:len(df_stock_filtered)],
                         mode='lines',
-                        name='Actual'
+                        name='Train Price'
+                    ),
+                    go.Scatter(
+                        x=df_stock_filtered['Date'][:len(actual_prices)],
+                        y=actual_prices,
+                        mode='lines',
+                        name='Actual Test Price'
+                    ),
+                    go.Scatter(
+                        x=df_stock_filtered['Date'][:len(predicted_prices)],
+                        y=predicted_prices,
+                        mode='lines',
+                        name='Predicted Test Price'
+                    ),
+                    go.Scatter(
+                        x=df_predictions['Date'],
+                        y=df_predictions['Future_Price_Prediction'],
+                        mode='lines',
+                        name='Future Price Prediction',
+                        line=dict(dash='dash')
                     )
                 ],
                 'layout': go.Layout(
-                    title='LSTM Model Predictions',
+                    title=f'LSTM Model Predictions for {selected_stock}',
                     xaxis={'title': 'Date'},
-                    yaxis={'title': 'Price'}
+                    yaxis={'title': 'Price'},
+                    hovermode='closest'
                 )
             }
-        )
-    ])
+
+            return figure, ''
+
+        except Exception as e:
+            logging.error(f"Error in update_graph: {e}")
+            return {}, f"An error occurred: {e}"
+
     return layout
+
+# Example usage
+if __name__ == '__main__':
+    app = Dash(__name__)
+    app.layout = create_layout(app)
+    app.run_server(debug=True)

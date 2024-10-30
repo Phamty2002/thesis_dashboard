@@ -1,23 +1,18 @@
-# app.py
-
 import dash
 from dash import html, dcc
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
 
-# Import các file dashboard
-import dashboard_LSTM
-import dashboard_LSTM_SVR
-import dashboard_NP
-import dashboard_Pr
-import dashboard_SVR
-import dashboard_XG
+# Import the create_layout functions from each dashboard
+from dashboard_LSTM import create_layout as create_lstm_layout
+from dashboard_LSTM_SVR import create_layout as create_lstm_svr_layout
+# Import other dashboards similarly...
 
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=external_stylesheets)
 server = app.server
 
-# Layout chính với menu điều hướng
+# Main layout with navigation
 app.layout = html.Div([
     dbc.NavbarSimple(
         brand="Forecast Dashboards",
@@ -36,26 +31,26 @@ app.layout = html.Div([
     html.Div(id='page-content')
 ])
 
-# Callback để điều hướng và hiển thị dashboard tương ứng
+# Callback to render the selected dashboard
 @app.callback(Output('page-content', 'children'),
               [Input('url', 'pathname')])
 def display_page(pathname):
     if pathname == '/dashboard_LSTM':
-        return dashboard_LSTM.create_layout(app)
+        return create_lstm_layout(app)
     elif pathname == '/dashboard_LSTM_SVR':
-        return dashboard_LSTM_SVR.create_layout(app)
+        return create_lstm_svr_layout(app)
     elif pathname == '/dashboard_NP':
-        return dashboard_NP.create_layout(app)
+        return create_np_layout(app)
     elif pathname == '/dashboard_Pr':
-        return dashboard_Pr.create_layout(app)
+        return create_pr_layout(app)
     elif pathname == '/dashboard_SVR':
-        return dashboard_SVR.create_layout(app)
+        return create_svr_layout(app)
     elif pathname == '/dashboard_XG':
-        return dashboard_XG.create_layout(app)
+        return create_xg_layout(app)
     else:
         return html.Div([
             html.H3('Welcome to the Forecast Dashboard! Please select a dashboard from the navigation menu.')
         ])
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=True, use_reloader=False)
