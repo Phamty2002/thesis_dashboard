@@ -497,3 +497,41 @@ def download_predictions(n_clicks, selected_stock):
 # Run Dash app
 if __name__ == '__main__':
     app.run_server(debug=True, use_reloader=False)
+
+
+from dash import html, dcc
+import plotly.graph_objs as go
+import pandas as pd
+
+def create_layout(app):
+    # Load dữ liệu từ file CSV cho mô hình LSTM
+    df = pd.read_csv('Result/forecast_summary_lstm_svr.csv')
+
+    layout = html.Div([
+        html.H2('LSTM Model Dashboard'),
+        dcc.Graph(
+            id='graph-lstm',
+            figure={
+                'data': [
+                    go.Scatter(
+                        x=df['Date'],
+                        y=df['Predicted'],
+                        mode='lines+markers',
+                        name='Predicted'
+                    ),
+                    go.Scatter(
+                        x=df['Date'],
+                        y=df['Actual'],
+                        mode='lines',
+                        name='Actual'
+                    )
+                ],
+                'layout': go.Layout(
+                    title='LSTM Model Predictions',
+                    xaxis={'title': 'Date'},
+                    yaxis={'title': 'Price'}
+                )
+            }
+        )
+    ])
+    return layout

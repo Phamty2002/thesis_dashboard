@@ -36,7 +36,6 @@ app.layout = html.Div([
     html.Div(id='page-content')
 ])
 
-# Callback để điều hướng và hiển thị dashboard tương ứng
 @app.callback(Output('page-content', 'children'),
               [Input('url', 'pathname')])
 def display_page(pathname):
