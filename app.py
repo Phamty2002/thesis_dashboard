@@ -6,12 +6,23 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import logging
 import ast
+from flask_cors import CORS
+from flask import Flask
+from dash import Dash
+
+server = Flask(__name__)
+CORS(server)
+
+@server.after_request
+def add_header(response):
+    response.headers['X-Frame-Options'] = 'ALLOWALL'  # Cho phép embedding qua iframe
+    return response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 # Initialize Dash app
-app = dash.Dash(__name__)
+app = Dash(__name__, server=server)
 server = app.server  # For deployment
 
 # Paths to data
