@@ -41,7 +41,7 @@ def load_forecast_summary(file_name):
                 except (ValueError, SyntaxError) as e:
                     logging.error(f"Error parsing column '{col}' in '{file_name}': {e}")
                     df[col] = [[] for _ in range(len(df))]
-        logging.info(f"Loaded '{file_name}' successfully.")
+        logging.info(f"Loaded '{file_name}' successfully. Number of records: {len(df)}.")
         return df
     else:
         logging.warning(f"Could not find '{file_name}'.")
@@ -55,6 +55,9 @@ forecast_summary_neural_prophet = load_forecast_summary('forecast_summary_neural
 
 # *** New Addition: Load SVR forecast summary ***
 forecast_summary_svr = load_forecast_summary('forecast_summary_svr.csv')
+
+# *** New Addition: Load XGBoost forecast summary ***
+forecast_summary_xgboost = load_forecast_summary('forecast_summary_XGBoost.csv')
 
 # Define app layout
 app.layout = html.Div([
@@ -70,7 +73,8 @@ app.layout = html.Div([
                 {'label': 'LSTM_SVR', 'value': 'LSTM_SVR'},
                 {'label': 'Prophet', 'value': 'Prophet'},
                 {'label': 'Neural_Prophet', 'value': 'Neural_Prophet'},
-                {'label': 'SVR', 'value': 'SVR'}  # *** Added SVR ***
+                {'label': 'SVR', 'value': 'SVR'},  # *** Added SVR ***
+                {'label': 'XGBoost', 'value': 'XGBoost'}  # *** Added XGBoost ***
             ],
             value='LSTM',
             clearable=False
@@ -158,6 +162,8 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
             forecast_summary_df = forecast_summary_neural_prophet
         elif model_selected == 'SVR':  # *** Handle SVR ***
             forecast_summary_df = forecast_summary_svr
+        elif model_selected == 'XGBoost':  # *** Handle XGBoost ***
+            forecast_summary_df = forecast_summary_xgboost
         else:
             raise ValueError("Invalid model selected.")
         
@@ -280,7 +286,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
         if 'show_forecast' in forecast_option and future_prices:
             last_date = df_stock_sorted['Date'].max()
             # For models like Prophet and Neural_Prophet, frequency might differ
-            if model_selected in ['Prophet', 'Neural_Prophet']:
+            if model_selected in ['Prophet', 'Neural_Prophet', 'XGBoost']:  # *** Include XGBoost ***
                 freq = 'D'  # Daily frequency
             else:
                 freq = 'B'  # Business days
@@ -382,7 +388,7 @@ def download_predictions(n_clicks, model_selected, selected_stock):
         if n_clicks is None:
             return dash.no_update
 
-        # *** Handle SVR in forecast data selection ***
+        # *** Handle SVR and XGBoost in forecast data selection ***
         if model_selected == 'LSTM_SVR':
             forecast_summary_df = forecast_summary_lstm_svr
         elif model_selected == 'LSTM':
@@ -393,6 +399,8 @@ def download_predictions(n_clicks, model_selected, selected_stock):
             forecast_summary_df = forecast_summary_neural_prophet
         elif model_selected == 'SVR':  # *** Handle SVR ***
             forecast_summary_df = forecast_summary_svr
+        elif model_selected == 'XGBoost':  # *** Handle XGBoost ***
+            forecast_summary_df = forecast_summary_xgboost
         else:
             raise ValueError("Invalid model selected.")
         
@@ -465,8 +473,8 @@ def download_predictions(n_clicks, model_selected, selected_stock):
         # Add future predictions if any
         if future_prices:
             last_date = df_stock['Date'].max()
-            # For models like Prophet and Neural_Prophet, frequency might differ
-            if model_selected in ['Prophet', 'Neural_Prophet']:
+            # For models like Prophet, Neural_Prophet, and XGBoost, frequency might differ
+            if model_selected in ['Prophet', 'Neural_Prophet', 'XGBoost']:
                 freq = 'D'  # Daily frequency
             else:
                 freq = 'B'  # Business days
