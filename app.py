@@ -50,7 +50,7 @@ def load_forecast_summary(file_name):
 # Load forecast summaries
 forecast_summary_lstm_svr = load_forecast_summary('forecast_summary_lstm_svr.csv')
 forecast_summary_lstm = load_forecast_summary('forecast_summary.csv')
-forecast_summary_neural_prophet = load_forecast_summary('forecast_summary_neural_prophet.csv')
+forecast_summary_prophet = load_forecast_summary('forecast_summary_Prophet.csv')
 
 # Define app layout
 app.layout = html.Div([
@@ -64,7 +64,7 @@ app.layout = html.Div([
             options=[
                 {'label': 'LSTM', 'value': 'LSTM'},
                 {'label': 'LSTM_SVR', 'value': 'LSTM_SVR'},
-                {'label': 'Neural_Prophet', 'value': 'Neural_Prophet'}
+                {'label': 'Prophet', 'value': 'Prophet'}
             ],
             value='LSTM',
             clearable=False
@@ -136,24 +136,23 @@ app.layout = html.Div([
 def update_graph(model_selected, selected_stock, start_date, end_date, forecast_option):
     try:
         logging.info(f"[{model_selected}] Updating graph for stock: {selected_stock}")
-
+        
         # Convert dates to datetime
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
-
-        # Select the correct forecast summary file based on model selection
+        
+        # Retrieve forecast data based on selected model
         if model_selected == 'LSTM_SVR':
             forecast_summary_df = forecast_summary_lstm_svr
         elif model_selected == 'LSTM':
             forecast_summary_df = forecast_summary_lstm
-        elif model_selected == 'Neural_Prophet':
-            forecast_summary_df = forecast_summary_neural_prophet
+        elif model_selected == 'Prophet':
+            forecast_summary_df = forecast_summary_prophet
         else:
             raise ValueError("Invalid model selected.")
         
-        # Retrieve the row for the selected stock symbol
         forecast_row = forecast_summary_df[forecast_summary_df['Symbol'] == selected_stock]
-
+        
         if forecast_row.empty:
             return {
                 'data': [],
@@ -163,19 +162,13 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                     yaxis={'title': 'Price'}
                 )
             }, None, f"No forecast data found for {selected_stock}."
-
-        # Extract data from forecast summary
+        
+        # Extract forecast data
         actual_prices = forecast_row.iloc[0].get('Actual_Prices', [])
         predicted_prices = forecast_row.iloc[0].get('Predicted_Prices', [])
         future_prices = forecast_row.iloc[0].get('Future_Price_Predictions', [])
         train_prices = forecast_row.iloc[0].get('Train_Prices', [])
-
-        # Debug logging to verify data loading
-        logging.info(f"Actual Prices length for {selected_stock}: {len(actual_prices)}")
-        logging.info(f"Predicted Prices length for {selected_stock}: {len(predicted_prices)}")
-        logging.info(f"Future Prices length for {selected_stock}: {len(future_prices)}")
-        logging.info(f"Train Prices length for {selected_stock}: {len(train_prices)}")
-
+        
         # Load stock data
         stock_data_file = os.path.join(folder_path, f'{selected_stock}.csv')
         if not os.path.exists(stock_data_file):
@@ -187,12 +180,12 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                     yaxis={'title': 'Price'}
                 )
             }, None, f"Stock data file not found for {selected_stock}."
-
+        
         df_stock = pd.read_csv(stock_data_file)
         df_stock['Date'] = pd.to_datetime(df_stock['Date'])
         df_stock_sorted = df_stock.sort_values('Date')
         dates = df_stock_sorted['Date']
-
+        
         # Calculate indices for train and test sets
         time_step = 60
         data_length = len(df_stock)
@@ -200,74 +193,80 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
         samples_per_year = 252
         train_size = 8 * samples_per_year
         test_size = 2 * samples_per_year
-
+        
         if train_size + test_size > total_samples:
             train_size = int(total_samples * 0.8)
             test_size = total_samples - train_size
-
+        
         train_indices = range(time_step, time_step + train_size)
         test_indices = range(time_step + train_size, time_step + train_size + test_size)
-
-        # Create DataFrames for plotting with checks for data availability
+        
+        # Ensure all arrays have the same length
+        min_train_length = min(len(train_indices), len(train_prices))
+        min_test_length = min(len(test_indices), len(actual_prices), len(predicted_prices))
+        
+        # Create DataFrames for plotting with aligned lengths
+        df_train = pd.DataFrame({
+            'Date': dates.iloc[train_indices[:min_train_length]],
+            'Train_Price': train_prices[:min_train_length]
+        })
+        
+        df_test = pd.DataFrame({
+            'Date': dates.iloc[test_indices[:min_test_length]],
+            'Actual_Price': actual_prices[:min_test_length],
+            'Predicted_Price': predicted_prices[:min_test_length]
+        })
+        
+        # Filter data based on selected date range
+        df_train_filtered = df_train[
+            (df_train['Date'] >= start_date) & 
+            (df_train['Date'] <= end_date)
+        ]
+        
+        df_test_filtered = df_test[
+            (df_test['Date'] >= start_date) & 
+            (df_test['Date'] <= end_date)
+        ]
+        
+        # Create plot data
         plot_data = []
-
-        # Train Prices Plot
-        if train_prices:
-            df_train = pd.DataFrame({
-                'Date': dates.iloc[train_indices],
-                'Train_Price': train_prices[:len(train_indices)]
-            })
-            df_train_filtered = df_train[
-                (df_train['Date'] >= start_date) & 
-                (df_train['Date'] <= end_date)
-            ]
-            if not df_train_filtered.empty:
-                plot_data.append(
-                    go.Scatter(
-                        x=df_train_filtered['Date'],
-                        y=df_train_filtered['Train_Price'],
-                        mode='lines',
-                        name='Train Price',
-                        line=dict(color='red')
-                    )
+        
+        # Add train prices
+        if not df_train_filtered.empty:
+            plot_data.append(
+                go.Scatter(
+                    x=df_train_filtered['Date'],
+                    y=df_train_filtered['Train_Price'],
+                    mode='lines',
+                    name='Train Price',
+                    line=dict(color='red')
                 )
-
-        # Actual and Predicted Test Prices Plot
-        if actual_prices and predicted_prices:
-            df_test = pd.DataFrame({
-                'Date': dates.iloc[test_indices[:len(actual_prices)]],
-                'Actual_Price': actual_prices,
-                'Predicted_Price': predicted_prices
-            })
-            df_test_filtered = df_test[
-                (df_test['Date'] >= start_date) & 
-                (df_test['Date'] <= end_date)
-            ]
-
-            if not df_test_filtered.empty:
-                # Actual Prices
-                plot_data.append(
-                    go.Scatter(
-                        x=df_test_filtered['Date'],
-                        y=df_test_filtered['Actual_Price'],
-                        mode='lines',
-                        name='Actual Test Price',
-                        line=dict(color='green')
-                    )
+            )
+        
+        # Add actual test prices
+        if not df_test_filtered.empty:
+            plot_data.append(
+                go.Scatter(
+                    x=df_test_filtered['Date'],
+                    y=df_test_filtered['Actual_Price'],
+                    mode='lines',
+                    name='Actual Test Price',
+                    line=dict(color='green')
                 )
-
-                # Predicted Prices
-                plot_data.append(
-                    go.Scatter(
-                        x=df_test_filtered['Date'],
-                        y=df_test_filtered['Predicted_Price'],
-                        mode='lines',
-                        name='Predicted Test Price',
-                        line=dict(color='blue')
-                    )
+            )
+        
+            # Add predicted test prices
+            plot_data.append(
+                go.Scatter(
+                    x=df_test_filtered['Date'],
+                    y=df_test_filtered['Predicted_Price'],
+                    mode='lines',
+                    name='Predicted Test Price',
+                    line=dict(color='blue')
                 )
-
-        # Future Predictions Plot
+            )
+        
+        # Add future predictions if selected
         if 'show_forecast' in forecast_option and future_prices:
             last_date = df_stock_sorted['Date'].max()
             future_dates = pd.date_range(
@@ -275,16 +274,17 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                 periods=len(future_prices),
                 freq='B'  # Business days
             )
-
+            
             df_future = pd.DataFrame({
                 'Date': future_dates,
                 'Future_Price': future_prices
             })
+            
             df_future_filtered = df_future[
                 (df_future['Date'] >= start_date) & 
                 (df_future['Date'] <= end_date)
             ]
-
+            
             if not df_future_filtered.empty:
                 plot_data.append(
                     go.Scatter(
@@ -295,8 +295,18 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                         line=dict(dash='dash', color='orange')
                     )
                 )
-
-        # Create figure layout with the updated plot data
+        
+        # Log array lengths for debugging
+        logging.info(f"""
+        Array lengths:
+        Train indices: {len(train_indices)}
+        Test indices: {len(test_indices)}
+        Train prices: {len(train_prices)}
+        Actual prices: {len(actual_prices)}
+        Predicted prices: {len(predicted_prices)}
+        """)
+        
+        # Create figure
         figure = {
             'data': plot_data,
             'layout': go.Layout(
@@ -306,7 +316,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                 hovermode='closest'
             )
         }
-
+        
         # Prepare metrics output
         metrics = forecast_row.iloc[0]
         metrics_df = pd.DataFrame({
@@ -317,7 +327,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                 f"{metrics.get('MAPE', 'N/A'):.2%}" if pd.notnull(metrics.get('MAPE')) else 'N/A'
             ]
         })
-
+        
         metrics_output = html.Div([
             html.H4('Evaluation Metrics'),
             dash_table.DataTable(
@@ -331,9 +341,9 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                 style_table={'width': '50%'}
             )
         ])
-
+        
         return figure, metrics_output, None
-
+        
     except Exception as e:
         logging.error(f"[{model_selected}] An error occurred: {e}")
         return {
