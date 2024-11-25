@@ -8,21 +8,22 @@ import logging
 import ast
 from flask_cors import CORS
 from flask import Flask
-from dash import Dash
+import dash_bootstrap_components as dbc  # Import Dash Bootstrap Components
 
+# Initialize Flask server and enable CORS
 server = Flask(__name__)
 CORS(server)
 
 @server.after_request
 def add_header(response):
-    response.headers['X-Frame-Options'] = 'ALLOWALL'  # Cho phép embedding qua iframe
+    response.headers['X-Frame-Options'] = 'ALLOWALL'  # Allows embedding via iframe
     return response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
-# Initialize Dash app
-app = Dash(__name__, server=server)
+# Initialize Dash app with Bootstrap theme
+app = dash.Dash(__name__, server=server, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server  # For deployment
 
 # Paths to data
@@ -70,91 +71,149 @@ forecast_summary_svr = load_forecast_summary('forecast_summary_svr.csv')
 # *** New Addition: Load XGBoost forecast summary ***
 forecast_summary_xgboost = load_forecast_summary('forecast_summary_XGBoost.csv')
 
-# Define app layout
-app.layout = html.Div([
-    html.H1('Stock Price Predictions Dashboard'),
-    
-    # Model Selection Dropdown
-    html.Div([
-        html.Label('Select Model:'),
-        dcc.Dropdown(
-            id='model-dropdown',
-            options=[
-                {'label': 'LSTM', 'value': 'LSTM'},
-                {'label': 'LSTM_SVR', 'value': 'LSTM_SVR'},
-                {'label': 'Prophet', 'value': 'Prophet'},
-                {'label': 'Neural_Prophet', 'value': 'Neural_Prophet'},
-                {'label': 'SVR', 'value': 'SVR'},  # *** Added SVR ***
-                {'label': 'XGBoost', 'value': 'XGBoost'}  # *** Added XGBoost ***
-            ],
-            value='LSTM',
-            clearable=False
-        )
-    ], style={'width': '20%', 'display': 'inline-block'}),
-    
-    # Controls
-    html.Div([
-        html.Div([
-            html.Label('Select Stock Symbol'),
-            dcc.Dropdown(
-                id='stock-dropdown',
-                options=[{'label': s, 'value': s} for s in symbols],
-                value='NVDA'
-            )
-        ], style={'width': '25%', 'display': 'inline-block'}),
-        
-        html.Div([
-            html.Label('Select Date Range'),
-            dcc.DatePickerRange(
-                id='date-picker',
-                min_date_allowed='2014-09-18',
-                max_date_allowed='2025-09-18',
-                start_date='2014-09-18',
-                end_date='2025-09-18'
-            )
-        ], style={'display': 'inline-block', 'marginLeft': '50px'}),
-        
-        html.Div([
-            html.Label('Show 1-Year Forecast'),
-            dcc.Checklist(
-                id='forecast-checkbox',
-                options=[{'label': 'Include 1-Year Forecast', 'value': 'show_forecast'}],
-                value=[],
-                inline=True
-            )
-        ], style={'marginTop': '20px', 'display': 'inline-block', 'marginLeft': '50px'})
-    ], style={'padding': '20px'}),
-    
-    # Graph
-    dcc.Graph(id='price-graph'),
-    
-    # Evaluation Metrics
-    html.Div(id='metrics-output', style={'marginTop': '20px'}),
-    
-    # Download Button
-    html.Div([
-        html.Button("Download Predictions", id="download-button"),
-        dcc.Download(id="download-predictions")
-    ], style={'marginTop': '20px'}),
-    
-    # Download Info
-    html.Div(id='download-info', style={'marginTop': '10px'}),
-    
-    # Error Messages
-    html.Div(id='error-message', style={'color': 'red', 'marginTop': '10px'})
-])
+# Define app layout with improved interface using Dash Bootstrap Components
+app.layout = dbc.Container([
+    dbc.Row([
+        dbc.Col(html.H1('Stock Price Predictions Dashboard', className='text-center text-primary mb-4'), width=12)
+    ]),
 
+    # Selection Controls
+    dbc.Card([
+        dbc.CardBody([
+            dbc.Row([
+                # Select Model
+                dbc.Col([
+                    dbc.Label('Select Model:', html_for='model-dropdown', className='font-weight-bold'),
+                    dcc.Dropdown(
+                        id='model-dropdown',
+                        options=[
+                            {'label': 'LSTM', 'value': 'LSTM'},
+                            {'label': 'LSTM_SVR', 'value': 'LSTM_SVR'},
+                            {'label': 'Prophet', 'value': 'Prophet'},
+                            {'label': 'Neural_Prophet', 'value': 'Neural_Prophet'},
+                            {'label': 'SVR', 'value': 'SVR'},  # *** Added SVR ***
+                            {'label': 'XGBoost', 'value': 'XGBoost'}  # *** Added XGBoost ***
+                        ],
+                        value='LSTM',
+                        clearable=False,
+                        placeholder='Select a model'
+                    )
+                ], md=4, sm=12, className='mb-3'),
+
+                # Select Stock Symbol
+                dbc.Col([
+                    dbc.Label('Select Stock Symbol:', html_for='stock-dropdown', className='font-weight-bold'),
+                    dcc.Dropdown(
+                        id='stock-dropdown',
+                        options=[{'label': s, 'value': s} for s in symbols],
+                        value='NVDA',
+                        clearable=False,
+                        placeholder='Select a stock symbol'
+                    )
+                ], md=4, sm=12, className='mb-3'),
+
+                # Select Date Range
+                dbc.Col([
+                    dbc.Label('Select Date Range:', html_for='date-picker', className='font-weight-bold'),
+                    dcc.DatePickerRange(
+                        id='date-picker',
+                        min_date_allowed='2014-09-18',
+                        max_date_allowed='2025-09-18',
+                        start_date='2014-09-18',
+                        end_date='2025-09-18',
+                        display_format='YYYY-MM-DD',
+                        style={'width': '100%'}
+                    )
+                ], md=4, sm=12, className='mb-3'),
+            ], className='justify-content-center'),
+
+            dbc.Row([
+                # Number of Forecast Days
+                dbc.Col([
+                    dbc.Label('Number of Forecast Days:', html_for='forecast-days', className='font-weight-bold'),
+                    dbc.Input(
+                        id='forecast-days',
+                        type='number',
+                        min=1,
+                        max=365,  # Adjust as needed based on your data
+                        step=1,
+                        value=0,  # Default to approximately 1-year trading days
+                        placeholder='Enter number of forecast days'
+                    ),
+                    dbc.FormText("Please enter in the number of days you want to predict.", color="secondary")
+                ], md=4, sm=12, className='mb-3 mx-auto'),  # *** Đã căn giữa bằng className='mx-auto' ***
+            ], className='justify-content-center'),
+        ])
+    ], className='mb-4'),
+
+    # Graph
+    dbc.Card([
+        dbc.CardBody([
+            dcc.Graph(id='price-graph')
+        ])
+    ], className='mb-4'),
+
+    # Evaluation Metrics
+    dbc.Card([
+        dbc.CardBody([
+            html.H4('Evaluation Metrics', className='text-center text-success mb-3'),
+            dash_table.DataTable(
+                id='metrics-table',
+                columns=[{"name": i, "id": i} for i in ['Metric', 'Value']],
+                data=[],
+                style_cell={'textAlign': 'left', 'padding': '5px'},
+                style_header={
+                    'backgroundColor': 'rgb(230, 230, 230)',
+                    'fontWeight': 'bold'
+                },
+                style_table={'width': '50%', 'margin': '0 auto'}
+            )
+        ])
+    ], className='mb-4'),
+
+    # *** New Addition: Download Predictions Below Evaluation Metrics ***
+    dbc.Card([
+        dbc.CardBody([
+            dbc.Row(
+                dbc.Col(
+                    dbc.Button(
+                        "Download Predictions",
+                        id="download-button",
+                        color="primary",
+                        className="mt-2",  # Added top margin for spacing
+                        size="md"  # Adjust size as needed: 'sm', 'md', 'lg'
+                    ),
+                    width="auto",
+                    className='mx-auto'  # Center the button horizontally
+                )
+            ),
+            dcc.Download(id="download-predictions")
+        ])
+    ], className='mb-4'),
+
+    # Error Messages
+    dbc.Alert(
+        id='error-message',
+        color='danger',
+        is_open=False,
+        duration=4000,
+        className='text-center'
+    )
+], fluid=True)
+
+# *** Updated Callback: Changed forecast-checkbox to forecast_days ***
 @app.callback(
     [Output('price-graph', 'figure'),
-     Output('metrics-output', 'children'),
-     Output('error-message', 'children')],
+     Output('metrics-table', 'data'),
+     Output('error-message', 'children'),
+     Output('error-message', 'is_open')],
     [Input('model-dropdown', 'value'),
      Input('stock-dropdown', 'value'),
      Input('date-picker', 'start_date'),
      Input('date-picker', 'end_date'),
-     Input('forecast-checkbox', 'value')]
+     Input('forecast-days', 'value')]  # *** Changed Input ***
 )
-def update_graph(model_selected, selected_stock, start_date, end_date, forecast_option):
+def update_graph(model_selected, selected_stock, start_date, end_date, forecast_days):
     try:
         logging.info(f"[{model_selected}] Updating graph for stock: {selected_stock}")
         
@@ -181,6 +240,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
         forecast_row = forecast_summary_df[forecast_summary_df['Symbol'] == selected_stock]
         
         if forecast_row.empty:
+            error_msg = f"No forecast data found for {selected_stock}."
             return {
                 'data': [],
                 'layout': go.Layout(
@@ -188,7 +248,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                     xaxis={'title': 'Date'},
                     yaxis={'title': 'Price'}
                 )
-            }, None, f"No forecast data found for {selected_stock}."
+            }, [], error_msg, True
         
         # Extract forecast data
         actual_prices = forecast_row.iloc[0].get('Actual_Prices', [])
@@ -199,6 +259,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
         # Load stock data
         stock_data_file = os.path.join(folder_path, f'{selected_stock}.csv')
         if not os.path.exists(stock_data_file):
+            error_msg = f"Stock data file not found for {selected_stock}."
             return {
                 'data': [],
                 'layout': go.Layout(
@@ -206,7 +267,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                     xaxis={'title': 'Date'},
                     yaxis={'title': 'Price'}
                 )
-            }, None, f"Stock data file not found for {selected_stock}."
+            }, [], error_msg, True
         
         df_stock = pd.read_csv(stock_data_file)
         df_stock['Date'] = pd.to_datetime(df_stock['Date'])
@@ -293,23 +354,26 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                 )
             )
         
-        # Add future predictions if selected
-        if 'show_forecast' in forecast_option and future_prices:
+        # *** Handle user-specified number of forecast days ***
+        if forecast_days and future_prices:
+            forecast_days = min(forecast_days, len(future_prices))  # Ensure we don't exceed available forecast
+            selected_future_prices = future_prices[:forecast_days]
+            
             last_date = df_stock_sorted['Date'].max()
-            # For models like Prophet and Neural_Prophet, frequency might differ
-            if model_selected in ['Prophet', 'Neural_Prophet', 'XGBoost']:  # *** Include XGBoost ***
+            # For models like Prophet, Neural_Prophet, and XGBoost, frequency might differ
+            if model_selected in ['Prophet', 'Neural_Prophet', 'XGBoost']:
                 freq = 'D'  # Daily frequency
             else:
                 freq = 'B'  # Business days
             future_dates = pd.date_range(
                 start=last_date + pd.Timedelta(days=1),
-                periods=len(future_prices),
+                periods=forecast_days,
                 freq=freq
             )
             
             df_future = pd.DataFrame({
                 'Date': future_dates,
-                'Future_Price': future_prices
+                'Future_Price': selected_future_prices
             })
             
             df_future_filtered = df_future[
@@ -323,7 +387,7 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                         x=df_future_filtered['Date'],
                         y=df_future_filtered['Future_Price'],
                         mode='lines',
-                        name='1-Year Forecast',
+                        name=f'Forecast ({forecast_days} Days)',
                         line=dict(dash='dash', color='orange')
                     )
                 )
@@ -336,6 +400,8 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
         Train prices: {len(train_prices)}
         Actual prices: {len(actual_prices)}
         Predicted prices: {len(predicted_prices)}
+        Forecast days: {forecast_days}
+        Available future_prices: {len(future_prices)}
         """)
         
         # Create figure
@@ -360,24 +426,13 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
             ]
         })
         
-        metrics_output = html.Div([
-            html.H4('Evaluation Metrics'),
-            dash_table.DataTable(
-                columns=[{"name": i, "id": i} for i in metrics_df.columns],
-                data=metrics_df.to_dict('records'),
-                style_cell={'textAlign': 'left'},
-                style_header={
-                    'backgroundColor': 'rgb(230, 230, 230)',
-                    'fontWeight': 'bold'
-                },
-                style_table={'width': '50%'}
-            )
-        ])
+        metrics_data = metrics_df.to_dict('records')
         
-        return figure, metrics_output, None
-        
+        return figure, metrics_data, "", False  # No error
+
     except Exception as e:
-        logging.error(f"[{model_selected}] An error occurred: {e}")
+        logging.error(f"An error occurred in update_graph: {e}")
+        error_msg = f"An error occurred: {e}"
         return {
             'data': [],
             'layout': go.Layout(
@@ -385,16 +440,18 @@ def update_graph(model_selected, selected_stock, start_date, end_date, forecast_
                 xaxis={'title': 'Date'},
                 yaxis={'title': 'Price'}
             )
-        }, None, f"An error occurred: {str(e)}"
+        }, [], error_msg, True
 
+# *** Updated Download Callback: Included forecast_days ***
 @app.callback(
     Output("download-predictions", "data"),
     [Input("download-button", "n_clicks")],
     [State('model-dropdown', 'value'),
-     State('stock-dropdown', 'value')],
+     State('stock-dropdown', 'value'),
+     State('forecast-days', 'value')],  # *** Added forecast_days as State ***
     prevent_initial_call=True,
 )
-def download_predictions(n_clicks, model_selected, selected_stock):
+def download_predictions(n_clicks, model_selected, selected_stock, forecast_days):
     try:
         if n_clicks is None:
             return dash.no_update
@@ -481,28 +538,38 @@ def download_predictions(n_clicks, model_selected, selected_stock):
         
         logging.info(f"[{model_selected}] Prepared test set data for download with {len(df_test_download)} rows.")
         
-        # Add future predictions if any
-        if future_prices:
+        # *** Handle user-specified number of forecast days ***
+        if future_prices and forecast_days:
+            forecast_days = min(forecast_days, len(future_prices))  # Ensure we don't exceed available forecast
+            selected_future_prices = future_prices[:forecast_days]
+            
             last_date = df_stock['Date'].max()
             # For models like Prophet, Neural_Prophet, and XGBoost, frequency might differ
             if model_selected in ['Prophet', 'Neural_Prophet', 'XGBoost']:
                 freq = 'D'  # Daily frequency
             else:
                 freq = 'B'  # Business days
-            future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=len(future_prices), freq=freq)
+            future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=forecast_days, freq=freq)
             download_future_df = pd.DataFrame({
                 'Date': future_dates,
-                'Future_Price_Prediction': future_prices
+                'Future_Price_Prediction': selected_future_prices
             })
-            df_download = pd.concat([df_test_download, download_future_df], ignore_index=True)
             logging.info(f"[{model_selected}] Added future predictions to download data with {len(download_future_df)} rows.")
         else:
-            df_download = df_test_download
+            download_future_df = pd.DataFrame()
             logging.info(f"[{model_selected}] No future predictions to add to download data.")
         
-        # Convert DataFrame to CSV and send for download
+        # Concatenate test and future predictions
+        if not download_future_df.empty:
+            df_download = pd.concat([df_test_download, download_future_df], ignore_index=True)
+        else:
+            df_download = df_test_download
+        
         logging.info(f"[{model_selected}] Sending download data for {selected_stock}.")
+        
+        # Convert DataFrame to CSV and send for download
         return dcc.send_data_frame(df_download.to_csv, f'{selected_stock}_{model_selected}_Predictions.csv', index=False)
+    
     except Exception as e:
         logging.error(f"[{model_selected}] An error occurred during download: {e}")
         return dash.no_update
